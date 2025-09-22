@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="form-card">
+    <h2>File a FIR</h2>
+
+    <div id="progress-bar">
+        <div id="progress"></div>
+    </div>
+
+    <form id="firForm" method="post">
+        <!-- Step 1: Complainant Info -->
+        <div class="form-step form-step-active">
+            <h3>Complainant Information</h3>
+            <input type="text" name="full_name" placeholder="Full Name" value="{{ session['user'] }}" readonly>
+            <input type="email" name="email" placeholder="Email" required>
+            <input type="text" name="phone" placeholder="Phone Number" required>
+            <button type="button" class="btn btn-next">Next</button>
+        </div>
+
+        <!-- Step 2: Company Info -->
+        <div class="form-step">
+            <h3>Company Information</h3>
+            <input type="text" name="company_name" placeholder="Company Name" required>
+            <input type="text" name="company_address" placeholder="Company Address" required>
+            <input type="text" name="industry" placeholder="Industry" required>
+            <button type="button" class="btn btn-prev">Back</button>
+            <button type="button" class="btn btn-next">Next</button>
+        </div>
+        
+        <!-- Step 3: Accused and Witness Details -->
+        <div class="form-step">
+            <h3>Accused and Witness Details</h3>
+            <div class="input-group">
+                <input type="text" name="accused_name" placeholder="Name of Accused (if known)">
+                <input type="text" name="accused_role" placeholder="Role of Accused in Company">
+            </div>
+            <div class="input-group">
+                <input type="text" name="witness_name" placeholder="Name of Witness (if any)">
+                <input type="text" name="witness_contact" placeholder="Witness Contact Info">
+            </div>
+            <button type="button" class="btn btn-prev">Back</button>
+            <button type="button" class="btn btn-next">Next</button>
+        </div>
+
+
+        <!-- Step 4: Violation Details -->
+        <div class="form-step">
+            <h3>Violation Details</h3>
+            <select name="violation_type" required>
+                <option value="">Select Violation Type</option>
+                <option value="Fraud">Fraud</option>
+                <option value="Corruption">Corruption</option>
+                <option value="Tax Evasion">Tax Evasion</option>
+                <option value="HR Violation">HR Violation</option>
+                <option value="Other">Other</option>
+            </select>
+            <input type="text" name="location_details" placeholder="Location of Incident" required>
+            <input type="date" name="incident_date" required>
+            <textarea name="description" placeholder="Describe the violation in detail" required></textarea>
+            <button type="button" class="btn btn-prev">Back</button>
+            <button type="submit" class="btn">Submit FIR</button>
+        </div>
+    </form>
+</div>
+
+<script>
+const nextBtns = document.querySelectorAll('.btn-next');
+const prevBtns = document.querySelectorAll('.btn-prev');
+const formSteps = document.querySelectorAll('.form-step');
+const progress = document.getElementById('progress');
+let currentStep = 0;
+
+nextBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        if (currentStep < formSteps.length - 1) {
+            formSteps[currentStep].classList.remove('form-step-active');
+            currentStep++;
+            formSteps[currentStep].classList.add('form-step-active');
+            updateProgressBar();
+        }
+    });
+});
+
+prevBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        if (currentStep > 0) {
+            formSteps[currentStep].classList.remove('form-step-active');
+            currentStep--;
+            formSteps[currentStep].classList.add('form-step-active');
+            updateProgressBar();
+        }
+    });
+});
+
+function updateProgressBar() {
+    progress.style.width = ((currentStep+1)/formSteps.length) * 100 + '%';
+}
+</script>
+
+<style>
+.form-step { display:none; }
+.form-step-active { display:block; }
+#progress-bar { height:8px; background:#ddd; border-radius:4px; margin-bottom:20px; }
+#progress { height:100%; width:0; background:#1abc9c; border-radius:4px; transition:0.3s; }
+.input-group { display: flex; gap: 1rem; }
+.input-group input { width: 100%; }
+</style>
+{% endblock %}

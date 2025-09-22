@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="home-container">
+    <h2>Welcome to the White-Collar FIR Portal</h2>
+    <p>File FIRs, track reports, and get AI-assisted analysis for legal actions and laws.</p>
+    <div class="btn-group">
+        {% if 'user' in session %}
+            <a class="btn" href="{{ url_for('dashboard') }}">Go to Dashboard</a>
+            <a class="btn" href="{{ url_for('report') }}">File FIR</a>
+        {% else %}
+            <a class="btn" href="{{ url_for('login') }}">Login</a>
+            <a class="btn" href="{{ url_for('register') }}">Register</a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

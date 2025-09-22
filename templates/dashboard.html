@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="dashboard-container">
+    {% if reports %}
+        {% for fir in reports %}
+        <div class="card">
+            <h3>{{ fir.name }} - {{ fir.company }}</h3>
+            <p><strong>Status:</strong> {{ fir.status }}</p>
+            <p><strong>Description:</strong> {{ fir.description }}</p>
+            <p><strong>Suggested Laws:</strong> {{ fir.laws }}</p>
+            <p><strong>Recommended Actions:</strong> {{ fir.actions }}</p>
+            <a class="btn" href="{{ url_for('download_fir', fir_id=loop.index0) }}">Download PDF</a>
+        </div>
+        {% endfor %}
+    {% else %}
+        <p>No FIRs filed yet. <a href="{{ url_for('report') }}">File your first FIR</a></p>
+    {% endif %}
+</div>
+{% endblock %}
