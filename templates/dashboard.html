@@ -9,7 +9,7 @@
             <p><strong>Description:</strong> {{ fir.description }}</p>
             <p><strong>Suggested Laws:</strong> {{ fir.laws }}</p>
             <p><strong>Recommended Actions:</strong> {{ fir.actions }}</p>
-            <a class="btn" href="{{ url_for('download_fir', fir_id=loop.index0) }}">Download PDF</a>
+            <a class="btn" href="{{ url_for('download_fir', fir_id=fir.id) }}">Download PDF</a>
         </div>
         {% endfor %}
     {% else %}
