@@ -3,7 +3,13 @@ import json, io, os
 from fpdf import FPDF
 import google.generativeai as genai
 
-app = Flask(__name__)
+# --- Vercel Specific Paths ---
+# This tells Flask to look for the templates and static folders in the project's root directory,
+# not in the 'api' folder where this file is located.
+template_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'templates')
+static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'static')
+
+app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 app.secret_key = "supersecretkey"
 
 # --- API Key Configuration and Validation ---
@@ -168,8 +174,7 @@ def generate_fir_pdf(fir):
     pdf.multi_cell(0, 10, f"Description: {fir['description']}")
     pdf.multi_cell(0, 10, f"Suggested Laws: {fir['laws']}")
     pdf.multi_cell(0, 10, f"Recommended Actions: {fir['actions']}")
-
-    # Return the PDF content as a bytes object
+    
     pdf_output = pdf.output(dest='S').encode('latin-1')
     return io.BytesIO(pdf_output)
 
