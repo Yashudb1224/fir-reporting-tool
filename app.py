@@ -56,9 +56,13 @@ create_db_tables()
 
 # --- API Key Configuration and Validation ---
 api_key = os.getenv("GEN_API_KEY")
-if not api_key:
-    print("Warning: GEN_API_KEY environment variable not set. API analysis will fail.")
-genai.configure(api_key=api_key)
+if api_key:
+    print("API key found. Configuring Gemini.")
+    genai.configure(api_key=api_key)
+else:
+    print("API key not found. Gemini will not be configured.")
+    # You might want to consider raising an error here in a production environment
+    # to prevent the app from running without the key.
 
 # ---------------- Home ----------------
 @app.route("/")
