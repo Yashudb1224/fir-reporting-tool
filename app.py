@@ -222,6 +222,76 @@ def report():
     return render_template("report.html")
 
 # ---------------- Generate PDF ----------------
+from flask import send_file
+import io
+from fpdf import FPDF
+import re
+import textwrap
+
+# --- Safe text wrapper ---
+def safe_text(text, width=100):
+    """Wrap long text and break unbreakable words."""
+    if not text:
+        return "N/A"
+    text = re.sub(r"(\S{%d,})" % width,
+                  lambda m: " ".join(textwrap.wrap(m.group(0), width)),
+                  text)
+    return "\n".join(textwrap.wrap(text, width))
+
+# --- PDF generator ---
+# --- PDF generator ---
+def generate_fir_pdf(fir_dict):
+    pdf = FPDF()
+    pdf.add_page()
+
+    # Set page margins
+    pdf.set_left_margin(10)
+    pdf.set_right_margin(10)
+
+    # Add fonts
+    pdf.add_font("DejaVu", "", "fonts/DejaVuSans.ttf", uni=True)
+    pdf.add_font("DejaVu", "B", "fonts/DejaVuSans-Bold.ttf", uni=True)
+
+    # Title
+    pdf.set_font("DejaVu", "B", 16)
+    pdf.cell(0, 10, "First Information Report (FIR)", ln=True, align="C")
+    pdf.ln(10)
+
+    width = pdf.w - pdf.l_margin - pdf.r_margin
+    pdf.set_font("DejaVu", "", 12)
+
+    fields = [
+        ("Complainant", "name"),
+        ("Email", "email"),
+        ("Phone", "phone"),
+        ("Accused", "accused_name"),
+        ("Role", "accused_role"),
+        ("Incident Date", "incident_date"),
+        ("Location", "location_details"),
+        ("Violation Type", "violation_type"),
+        ("Description", "description"),
+        ("Company", "company"),
+        ("Company Address", "company_address"),
+        ("Industry", "industry"),
+        ("Suggested Laws", "laws"),
+        ("Recommended Actions", "actions")
+    ]
+
+    for label, key in fields:
+        text = safe_text(fir_dict.get(key, "N/A"))
+        pdf.set_font("DejaVu", "B", 12)
+        pdf.multi_cell(width, 8, f"{label}:", ln=True)
+        pdf.set_font("DejaVu", "", 12)
+        pdf.multi_cell(width, 8, text)
+        pdf.ln(2)  # small spacing after each field
+
+    pdf_bytes = pdf.output(dest="S")
+    return io.BytesIO(pdf_bytes)
+
+
+
+
+# --- Fixed download route ---
 @app.route("/download/<int:fir_id>")
 def download_fir(fir_id):
     if "user_id" not in session:
@@ -229,61 +299,23 @@ def download_fir(fir_id):
         return redirect(url_for("login"))
 
     conn = get_db_connection()
-    fir = conn.execute("SELECT * FROM fir_reports WHERE id = ? AND user_id = ?", (fir_id, session['user_id'])).fetchone()
+    fir_row = conn.execute(
+        "SELECT * FROM fir_reports WHERE id = ? AND user_id = ?", 
+        (fir_id, session['user_id'])
+    ).fetchone()
     conn.close()
 
-    if not fir:
+    if not fir_row:
         flash("Invalid FIR ID or you do not have permission to download this report.", "error")
         return redirect(url_for("dashboard"))
 
-    pdf_file = generate_fir_pdf(fir)
-    return send_file(pdf_file, download_name=f"FIR_{fir_id}.pdf", as_attachment=True, mimetype='application/pdf')
+    # Convert sqlite3.Row to dict
+    fir_dict = dict(fir_row)
 
-def generate_fir_pdf(fir):
-    pdf = FPDF()
-    pdf.add_page()
+    pdf_file = generate_fir_pdf(fir_dict)
+    return send_file(pdf_file, download_name=f"FIR_{fir_id}.pdf", as_attachment=True, mimetype="application/pdf")
 
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, "FIR Report", ln=True, align="C")
 
-    pdf.set_font("Arial", "", 12)
-    pdf.ln(10)
-    
-    pdf.cell(0, 10, "Complainant Information", ln=True)
-    pdf.cell(0, 10, f"Name: {fir['name']}", ln=True)
-    pdf.cell(0, 10, f"Email: {fir['email']}", ln=True)
-    pdf.cell(0, 10, f"Phone: {fir['phone']}", ln=True)
-    pdf.ln(5)
-
-    pdf.cell(0, 10, "Company Information", ln=True)
-    pdf.cell(0, 10, f"Company: {fir['company']}", ln=True)
-    pdf.multi_cell(0, 10, f"Company Address: {fir['company_address']}")
-    pdf.cell(0, 10, f"Industry: {fir['industry']}", ln=True)
-    pdf.ln(5)
-
-    pdf.cell(0, 10, "Violation Details", ln=True)
-    pdf.cell(0, 10, f"Violation Type: {fir['violation_type']}", ln=True)
-    pdf.cell(0, 10, f"Incident Date: {fir['incident_date']}", ln=True)
-    pdf.multi_cell(0, 10, f"Description: {fir['description']}")
-    pdf.ln(5)
-
-    pdf.cell(0, 10, "Accused Details", ln=True)
-    pdf.cell(0, 10, f"Name: {fir['accused_name']}", ln=True)
-    pdf.cell(0, 10, f"Role: {fir['accused_role']}", ln=True)
-    pdf.ln(5)
-
-    pdf.cell(0, 10, "Witness Details", ln=True)
-    pdf.cell(0, 10, f"Name: {fir['witness_name']}", ln=True)
-    pdf.cell(0, 10, f"Contact: {fir['witness_contact']}", ln=True)
-    pdf.multi_cell(0, 10, f"Location Details: {fir['location_details']}")
-    pdf.ln(5)
-
-    pdf.cell(0, 10, "Legal Analysis", ln=True)
-    pdf.multi_cell(0, 10, f"Suggested Laws: {fir['laws']}")
-    pdf.multi_cell(0, 10, f"Recommended Actions: {fir['actions']}")
-    
-    pdf_output = pdf.output(dest='S').encode('latin-1')
-    return io.BytesIO(pdf_output)
 
 # ---------------- Privacy ----------------
 @app.route("/privacy")
