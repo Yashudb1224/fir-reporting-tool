@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file, session
 from werkzeug.security import generate_password_hash, check_password_hash
-import json, io, os, sqlite3
+import json, io, os, sqlite3, re, textwrap
 from fpdf import FPDF
 import google.generativeai as genai
 
@@ -51,18 +51,24 @@ def create_db_tables():
     conn.commit()
     conn.close()
 
-# Create the tables on startup
 create_db_tables()
 
-# --- API Key Configuration and Validation ---
+# --- API Key Configuration ---
 api_key = os.getenv("GEN_API_KEY")
+DEFAULT_MODEL = os.getenv("GEN_MODEL", "gemini-1.5-flash")
+FALLBACK_MODELS = [
+    DEFAULT_MODEL,
+    "gemini-1.5",
+    "gemini-1.5-pro",
+    "gemini-1.5-preview",
+    "gemini-1.0",
+]
+
 if api_key:
     print("API key found. Configuring Gemini.")
     genai.configure(api_key=api_key)
 else:
     print("API key not found. Gemini will not be configured.")
-    # You might want to consider raising an error here in a production environment
-    # to prevent the app from running without the key.
 
 # ---------------- Home ----------------
 @app.route("/")
@@ -76,7 +82,7 @@ def register():
         username = request.form.get("username")
         password = request.form.get("password")
         password_hash = generate_password_hash(password)
-        
+
         conn = get_db_connection()
         try:
             conn.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, password_hash))
@@ -89,7 +95,7 @@ def register():
             return render_template("register.html")
         finally:
             conn.close()
-            
+
     return render_template("register.html")
 
 # ---------------- Login ----------------
@@ -98,7 +104,7 @@ def login():
     if request.method == "POST":
         username = request.form.get("username")
         password = request.form.get("password")
-        
+
         conn = get_db_connection()
         user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
         conn.close()
@@ -110,7 +116,7 @@ def login():
             return redirect(url_for("dashboard"))
         else:
             flash("Invalid credentials", "error")
-            
+
     return render_template("login.html")
 
 # ---------------- Logout ----------------
@@ -127,11 +133,11 @@ def dashboard():
     if "user_id" not in session:
         flash("Please login first.", "error")
         return redirect(url_for("login"))
-    
+
     conn = get_db_connection()
     reports = conn.execute("SELECT * FROM fir_reports WHERE user_id = ?", (session['user_id'],)).fetchall()
     conn.close()
-    
+
     return render_template("dashboard.html", reports=reports)
 
 # ---------------- FIR Analysis ----------------
@@ -139,41 +145,56 @@ def analyze_fir(description):
     if not api_key:
         print("API key is missing. Skipping AI analysis.")
         return "Analysis failed: API key not configured.", "Try again later"
-    
-    try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content(
-            f"""You are a legal assistant. 
-            Analyze this FIR description and provide a response that strictly adheres to the following format. Do not include any other text.
-            
-            Description: "{description}"
-            
-            Suggested Laws: [List relevant Indian laws, sections, and their descriptions]
-            Recommended Actions: [Describe detailed, actionable steps to take]
-            """
-        )
 
-        text = response.text
-        suggested_laws = "Analysis failed: Could not parse AI response."
-        recommended_actions = "Try again later"
+    prompt = f"""You are a legal assistant.
+Analyze this FIR description and provide a response that strictly adheres to the following format. Do not include any other text.
 
-        if "Suggested Laws:" in text and "Recommended Actions:" in text:
-            try:
-                suggested_laws = text.split("Suggested Laws:")[1].split("Recommended Actions:")[0].strip()
-                recommended_actions = text.split("Recommended Actions:")[1].strip()
-            except IndexError:
-                suggested_laws = "Analysis failed: Unexpected response format from AI."
-                recommended_actions = "Try again later"
-        
-        if not text:
-            suggested_laws = "Analysis failed: AI response was blocked by safety filters or an internal error occurred."
+Description: "{description}"
+
+Suggested Laws: [List relevant Indian laws, sections, and short descriptions]
+Recommended Actions: [Describe detailed, actionable steps to take]
+"""
+    last_exception = None
+    tried = []
+    for candidate in FALLBACK_MODELS:
+        if not candidate:
+            continue
+        try:
+            tried.append(candidate)
+            model = genai.GenerativeModel(candidate)
+            response = model.generate_content(prompt)
+            text = getattr(response, "text", None)
+            if not text:
+                text = str(response)
+
+            suggested_laws = "Analysis failed: Could not parse AI response."
             recommended_actions = "Try again later"
 
-        return suggested_laws, recommended_actions
+            if text and "Suggested Laws:" in text and "Recommended Actions:" in text:
+                suggested_laws = text.split("Suggested Laws:")[1].split("Recommended Actions:")[0].strip()
+                recommended_actions = text.split("Recommended Actions:")[1].strip()
+            elif text:
+                parts = text.split("Recommended Actions:")
+                if len(parts) == 2:
+                    suggested_laws = parts[0].replace("Suggested Laws:", "").strip()
+                    recommended_actions = parts[1].strip()
+                else:
+                    suggested_laws = "See AI analysis below."
+                    recommended_actions = text.strip()
 
-    except Exception as e:
-        print(f"AI analysis error: {type(e).__name__}: {e}")
-        return "Analysis failed: An API or network error occurred. Check the server console for details.", "Try again later"
+            return suggested_laws, recommended_actions
+
+        except Exception as e:
+            last_exception = e
+            print(f"AI attempt with model '{candidate}' failed: {e}")
+            continue
+
+    guidance = (
+        "Analysis failed: Could not reach a supported model. "
+        "Make sure your API key is correct and the model name is available."
+    )
+    print(f"AI analysis error after trying models {tried}: {last_exception}")
+    return guidance, "Try again later"
 
 # ---------------- File FIR ----------------
 @app.route("/report", methods=["GET", "POST"])
@@ -215,22 +236,14 @@ def report():
         ))
         conn.commit()
         conn.close()
-        
+
         flash("FIR submitted successfully!", "success")
         return redirect(url_for("dashboard"))
-        
+
     return render_template("report.html")
 
 # ---------------- Generate PDF ----------------
-from flask import send_file
-import io
-from fpdf import FPDF
-import re
-import textwrap
-
-# --- Safe text wrapper ---
 def safe_text(text, width=100):
-    """Wrap long text and break unbreakable words."""
     if not text:
         return "N/A"
     text = re.sub(r"(\S{%d,})" % width,
@@ -238,27 +251,31 @@ def safe_text(text, width=100):
                   text)
     return "\n".join(textwrap.wrap(text, width))
 
-# --- PDF generator ---
-# --- PDF generator ---
 def generate_fir_pdf(fir_dict):
     pdf = FPDF()
     pdf.add_page()
-
-    # Set page margins
     pdf.set_left_margin(10)
     pdf.set_right_margin(10)
 
-    # Add fonts
-    pdf.add_font("DejaVu", "", "fonts/DejaVuSans.ttf", uni=True)
-    pdf.add_font("DejaVu", "B", "fonts/DejaVuSans-Bold.ttf", uni=True)
+    try:
+        if os.path.exists("fonts/DejaVuSans.ttf") and os.path.exists("fonts/DejaVuSans-Bold.ttf"):
+            pdf.add_font("DejaVu", "", "fonts/DejaVuSans.ttf", uni=True)
+            pdf.add_font("DejaVu", "B", "fonts/DejaVuSans-Bold.ttf", uni=True)
+            regular_font = ("DejaVu", "")
+            bold_font = ("DejaVu", "B")
+        else:
+            raise FileNotFoundError("DejaVu fonts not found.")
+    except Exception as e:
+        print(f"Font fallback: {e}")
+        regular_font = ("Arial", "")
+        bold_font = ("Arial", "B")
 
-    # Title
-    pdf.set_font("DejaVu", "B", 16)
+    pdf.set_font(bold_font[0], bold_font[1], 16)
     pdf.cell(0, 10, "First Information Report (FIR)", ln=True, align="C")
-    pdf.ln(10)
+    pdf.ln(8)
 
     width = pdf.w - pdf.l_margin - pdf.r_margin
-    pdf.set_font("DejaVu", "", 12)
+    pdf.set_font(regular_font[0], regular_font[1], 12)
 
     fields = [
         ("Complainant", "name"),
@@ -279,19 +296,19 @@ def generate_fir_pdf(fir_dict):
 
     for label, key in fields:
         text = safe_text(fir_dict.get(key, "N/A"))
-        pdf.set_font("DejaVu", "B", 12)
-        pdf.multi_cell(width, 8, f"{label}:", ln=True)
-        pdf.set_font("DejaVu", "", 12)
-        pdf.multi_cell(width, 8, text)
-        pdf.ln(2)  # small spacing after each field
+        pdf.set_font(bold_font[0], bold_font[1], 12)
+        pdf.cell(0, 8, f"{label}:", ln=True)
+        pdf.set_font(regular_font[0], regular_font[1], 12)
+        pdf.multi_cell(width, 6, text)
+        pdf.ln(2)
 
+    # ✅ FIXED — remove encode, handle bytearray directly
     pdf_bytes = pdf.output(dest="S")
-    return io.BytesIO(pdf_bytes)
+    if isinstance(pdf_bytes, str):
+        pdf_bytes = pdf_bytes.encode("latin-1")
+    return io.BytesIO(bytes(pdf_bytes))
 
-
-
-
-# --- Fixed download route ---
+# --- Download route ---
 @app.route("/download/<int:fir_id>")
 def download_fir(fir_id):
     if "user_id" not in session:
@@ -300,7 +317,7 @@ def download_fir(fir_id):
 
     conn = get_db_connection()
     fir_row = conn.execute(
-        "SELECT * FROM fir_reports WHERE id = ? AND user_id = ?", 
+        "SELECT * FROM fir_reports WHERE id = ? AND user_id = ?",
         (fir_id, session['user_id'])
     ).fetchone()
     conn.close()
@@ -309,13 +326,10 @@ def download_fir(fir_id):
         flash("Invalid FIR ID or you do not have permission to download this report.", "error")
         return redirect(url_for("dashboard"))
 
-    # Convert sqlite3.Row to dict
     fir_dict = dict(fir_row)
-
     pdf_file = generate_fir_pdf(fir_dict)
+    pdf_file.seek(0)
     return send_file(pdf_file, download_name=f"FIR_{fir_id}.pdf", as_attachment=True, mimetype="application/pdf")
-
-
 
 # ---------------- Privacy ----------------
 @app.route("/privacy")
