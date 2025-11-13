@@ -8,7 +8,6 @@
     </div>
 
     <form id="firForm" method="post">
-        <!-- Step 1: Complainant Info -->
         <div class="form-step form-step-active">
             <h3>Complainant Information</h3>
             <input type="text" name="full_name" placeholder="Full Name" value="{{ session['user'] }}" readonly>
@@ -17,7 +16,6 @@
             <button type="button" class="btn btn-next">Next</button>
         </div>
 
-        <!-- Step 2: Company Info -->
         <div class="form-step">
             <h3>Company Information</h3>
             <input type="text" name="company_name" placeholder="Company Name" required>
@@ -27,7 +25,6 @@
             <button type="button" class="btn btn-next">Next</button>
         </div>
         
-        <!-- Step 3: Accused and Witness Details -->
         <div class="form-step">
             <h3>Accused and Witness Details</h3>
             <div class="input-group">
@@ -43,7 +40,6 @@
         </div>
 
 
-        <!-- Step 4: Violation Details -->
         <div class="form-step">
             <h3>Violation Details</h3>
             <select name="violation_type" required>
@@ -72,11 +68,25 @@ let currentStep = 0;
 
 nextBtns.forEach(btn => {
     btn.addEventListener('click', () => {
-        if (currentStep < formSteps.length - 1) {
+        // Simple client-side validation for required fields in the current step
+        const currentInputs = formSteps[currentStep].querySelectorAll('[required]');
+        let allValid = true;
+        currentInputs.forEach(input => {
+            if (!input.value) {
+                input.style.borderColor = '#e74c3c'; // Highlight invalid input
+                allValid = false;
+            } else {
+                input.style.borderColor = '#dcdcdc'; // Reset border color
+            }
+        });
+
+        if (allValid && currentStep < formSteps.length - 1) {
             formSteps[currentStep].classList.remove('form-step-active');
             currentStep++;
             formSteps[currentStep].classList.add('form-step-active');
             updateProgressBar();
+        } else if (!allValid) {
+            alert('Please fill out all required fields before proceeding.');
         }
     });
 });
@@ -95,14 +105,13 @@ prevBtns.forEach(btn => {
 function updateProgressBar() {
     progress.style.width = ((currentStep+1)/formSteps.length) * 100 + '%';
 }
+
+// Initialize progress bar on load
+document.addEventListener('DOMContentLoaded', updateProgressBar);
 </script>
 
 <style>
 .form-step { display:none; }
 .form-step-active { display:block; }
-#progress-bar { height:8px; background:#ddd; border-radius:4px; margin-bottom:20px; }
-#progress { height:100%; width:0; background:#1abc9c; border-radius:4px; transition:0.3s; }
-.input-group { display: flex; gap: 1rem; }
-.input-group input { width: 100%; }
 </style>
 {% endblock %}

@@ -135,10 +135,32 @@ def dashboard():
         return redirect(url_for("login"))
 
     conn = get_db_connection()
-    reports = conn.execute("SELECT * FROM fir_reports WHERE user_id = ?", (session['user_id'],)).fetchall()
+    # Fetch reports ordered by ID descending to get latest first
+    reports = conn.execute("SELECT * FROM fir_reports WHERE user_id = ? ORDER BY id DESC", (session['user_id'],)).fetchall()
     conn.close()
 
     return render_template("dashboard.html", reports=reports)
+
+# ---------------- View Single FIR ----------------
+@app.route("/view_fir/<int:fir_id>")
+def view_fir(fir_id):
+    if "user_id" not in session:
+        flash("Please login first.", "error")
+        return redirect(url_for("login"))
+
+    conn = get_db_connection()
+    fir = conn.execute(
+        "SELECT * FROM fir_reports WHERE id = ? AND user_id = ?",
+        (fir_id, session['user_id'])
+    ).fetchone()
+    conn.close()
+
+    if not fir:
+        flash("Report not found or access denied.", "error")
+        return redirect(url_for("dashboard"))
+
+    return render_template("view_fir.html", fir=fir)
+
 
 # ---------------- FIR Analysis ----------------
 def analyze_fir(description):
@@ -146,13 +168,19 @@ def analyze_fir(description):
         print("API key is missing. Skipping AI analysis.")
         return "Analysis failed: API key not configured.", "Try again later"
 
-    prompt = f"""You are a legal assistant.
+    prompt = f"""You are a legal assistant. Your goal is to provide **brief, actionable, and human-readable** analysis.
 Analyze this FIR description and provide a response that strictly adheres to the following format. Do not include any other text.
+The lists must be in **bullet-point format** and limited to **3-4 concise points** each.
 
 Description: "{description}"
 
-Suggested Laws: [List relevant Indian laws, sections, and short descriptions]
-Recommended Actions: [Describe detailed, actionable steps to take]
+Suggested Laws:
+* [Relevant Indian law, section, and short description]
+* [...]
+
+Recommended Actions:
+* [Concise, actionable step]
+* [...]
 """
     last_exception = None
     tried = []
@@ -170,10 +198,12 @@ Recommended Actions: [Describe detailed, actionable steps to take]
             suggested_laws = "Analysis failed: Could not parse AI response."
             recommended_actions = "Try again later"
 
+            # --- Extract and Clean the Content ---
             if text and "Suggested Laws:" in text and "Recommended Actions:" in text:
                 suggested_laws = text.split("Suggested Laws:")[1].split("Recommended Actions:")[0].strip()
                 recommended_actions = text.split("Recommended Actions:")[1].strip()
             elif text:
+                # Fallback extraction logic
                 parts = text.split("Recommended Actions:")
                 if len(parts) == 2:
                     suggested_laws = parts[0].replace("Suggested Laws:", "").strip()
@@ -181,6 +211,10 @@ Recommended Actions: [Describe detailed, actionable steps to take]
                 else:
                     suggested_laws = "See AI analysis below."
                     recommended_actions = text.strip()
+
+            # --- Post-process: Remove Markdown characters (*, -) and bolding (**) for cleaner display ---
+            suggested_laws = re.sub(r'[\*\-]', '', suggested_laws).replace('**', '')
+            recommended_actions = re.sub(r'[\*\-]', '', recommended_actions).replace('**', '')
 
             return suggested_laws, recommended_actions
 
@@ -299,7 +333,14 @@ def generate_fir_pdf(fir_dict):
         pdf.set_font(bold_font[0], bold_font[1], 12)
         pdf.cell(0, 8, f"{label}:", ln=True)
         pdf.set_font(regular_font[0], regular_font[1], 12)
-        pdf.multi_cell(width, 6, text)
+        # Handle the list items for PDF generation
+        if key in ["laws", "actions"]:
+            list_items = text.split('\n')
+            for item in list_items:
+                if item.strip():
+                    pdf.multi_cell(width, 6, "• " + item.strip())
+        else:
+            pdf.multi_cell(width, 6, text)
         pdf.ln(2)
 
     # ✅ FIXED — remove encode, handle bytearray directly

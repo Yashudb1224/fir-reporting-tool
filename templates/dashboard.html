@@ -2,18 +2,63 @@
 {% block content %}
 <div class="dashboard-container">
     {% if reports %}
-        {% for fir in reports %}
-        <div class="card">
-            <h3>{{ fir.name }} - {{ fir.company }}</h3>
-            <p><strong>Status:</strong> {{ fir.status }}</p>
-            <p><strong>Description:</strong> {{ fir.description }}</p>
-            <p><strong>Suggested Laws:</strong> {{ fir.laws }}</p>
-            <p><strong>Recommended Actions:</strong> {{ fir.actions }}</p>
-            <a class="btn" href="{{ url_for('download_fir', fir_id=fir.id) }}">Download PDF</a>
+        {% set latest_fir = reports[0] %}
+
+        {# --- Featured Card for Latest FIR --- #}
+        <div class="card featured-card">
+            <h2>✨ Latest Filed FIR: {{ latest_fir.company }}</h2>
+            <p><strong>Complainant:</strong> {{ latest_fir.name }}</p>
+            <p><strong>Violation:</strong> {{ latest_fir.violation_type }}</p>
+            <p><strong>Status:</strong> <span class="status-analyzed">{{ latest_fir.status }}</span></p>
+            <hr>
+            
+            <h4>Suggested Laws</h4>
+            <ul>
+                {% for law in latest_fir.laws.split('\n') %}
+                    {% if law.strip() %}
+                        <li>{{ law.strip() }}</li>
+                    {% endif %}
+                {% endfor %}
+            </ul>
+
+            <h4>Recommended Actions</h4>
+            <ul>
+                {% for action in latest_fir.actions.split('\n') %}
+                    {% if action.strip() %}
+                        <li>{{ action.strip() }}</li>
+                    {% endif %}
+                {% endfor %}
+            </ul>
+            
+            <a class="btn" href="{{ url_for('download_fir', fir_id=latest_fir.id) }}">Download Full Report</a>
         </div>
-        {% endfor %}
+        
+        {# --- List View for Older FIRs (if more than one) --- #}
+        {% if reports|length > 1 %}
+            <div class="list-card">
+                <h2>📁 Previous Reports ({{ reports|length - 1 }})</h2>
+                <ul class="fir-list">
+                    {% for fir in reports[1:] %}
+                    <li class="fir-list-item">
+                        <div class="list-details">
+                            <span class="list-title">{{ fir.company }}</span>
+                            <span class="list-subtitle">{{ fir.violation_type }} | Filed on {{ fir.incident_date }}</span>
+                        </div>
+                        <div class="list-actions">
+                            <span class="list-status status-analyzed">{{ fir.status }}</span>
+                            {# UPDATED: Link to the new view_fir route #}
+                            <a href="{{ url_for('view_fir', fir_id=fir.id) }}" class="btn-sm">View</a>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+
     {% else %}
-        <p>No FIRs filed yet. <a href="{{ url_for('report') }}">File your first FIR</a></p>
+        <div class="card">
+            <p>No FIRs filed yet. <a href="{{ url_for('report') }}">File your first FIR</a></p>
+        </div>
     {% endif %}
 </div>
 {% endblock %}

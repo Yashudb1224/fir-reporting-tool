@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="dashboard-container">
+    <div class="card featured-card full-view">
+        <a href="{{ url_for('dashboard') }}" class="btn-back">← Back to Dashboard</a>
+        <h2>Report Details: {{ fir.company }} (#{{ fir.id }})</h2>
+
+        {# --- Complainant Info --- #}
+        <section class="report-section">
+            <h3>Complainant & Contact</h3>
+            <p><strong>Name:</strong> {{ fir.name }}</p>
+            <p><strong>Email:</strong> {{ fir.email }}</p>
+            <p><strong>Phone:</strong> {{ fir.phone }}</p>
+        </section>
+
+        {# --- Company & Incident Info --- #}
+        <section class="report-section">
+            <h3>Incident Summary</h3>
+            <p><strong>Company:</strong> {{ fir.company }} ({{ fir.industry }})</p>
+            <p><strong>Incident Date:</strong> {{ fir.incident_date }}</p>
+            <p><strong>Violation Type:</strong> {{ fir.violation_type }}</p>
+            <p><strong>Location:</strong> {{ fir.location_details }}</p>
+        </section>
+
+        {# --- Description & Status --- #}
+        <section class="report-section">
+            <h3>Detailed Description</h3>
+            <p class="description-text">{{ fir.description }}</p>
+            <p><strong>Current Status:</strong> <span class="status-analyzed">{{ fir.status }}</span></p>
+        </section>
+
+        <hr>
+
+        {# --- AI Analysis --- #}
+        <section class="report-section">
+            <h3>AI-Assisted Analysis</h3>
+            
+            <h4>Suggested Laws</h4>
+            <ul>
+                {% for law in fir.laws.split('\n') %}
+                    {% if law.strip() %}
+                        <li>{{ law.strip() }}</li>
+                    {% endif %}
+                {% endfor %}
+            </ul>
+
+            <h4>Recommended Actions</h4>
+            <ul>
+                {% for action in fir.actions.split('\n') %}
+                    {% if action.strip() %}
+                        <li>{{ action.strip() }}</li>
+                    {% endif %}
+                {% endfor %}
+            </ul>
+        </section>
+        
+        <a class="btn" href="{{ url_for('download_fir', fir_id=fir.id) }}">Download Full Report PDF</a>
+    </div>
+</div>
+
+<style>
+/* Additional styles for the detailed view */
+.full-view {
+    max-width: 800px;
+    margin: 30px auto;
+}
+.full-view h2 {
+    margin-top: 0;
+}
+.report-section {
+    margin-bottom: 25px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f0f2f5;
+}
+.report-section h3 {
+    font-size: 1.3rem;
+    color: #2c3e50;
+    margin-bottom: 10px;
+}
+.description-text {
+    white-space: pre-wrap;
+    margin-bottom: 15px !important;
+    background: #fcfcfc;
+    padding: 15px;
+    border-radius: 6px;
+    border: 1px solid #eee;
+    font-style: italic;
+}
+.btn-back {
+    display: inline-block;
+    margin-bottom: 20px;
+    color: #3498db;
+    text-decoration: none;
+    font-weight: 600;
+}
+.btn-back:hover {
+    text-decoration: underline;
+}
+</style>
+{% endblock %}
